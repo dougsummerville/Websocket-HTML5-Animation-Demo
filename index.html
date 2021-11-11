@@ -1,0 +1,151 @@
+<!DOCTYPE HTML>
+
+<html>
+ <head>
+  <title>Projector Demo</title>
+  <script type = "text/javascript">
+	var ShowIsPlaying=false;
+	var ws;
+	function DisconnectServer() {
+		if(ws.readyState == 1 )
+		ws.close("1000","User Closed");
+	}
+	function ConnectServer() {
+		ws = new WebSocket("ws://localhost:10001");
+		ws.onopen = function() {
+			ws.send("Connected");
+			UpdateUi();
+			};
+		ws.onmessage = function (evt) { 
+			var received_msg = evt.data;
+			document.title="WooHoo"+received_msg
+			};
+		ws.onerror = function() { 
+			UpdateUi();
+			}
+		ws.onclose = function() { 
+			UpdateUi();
+			};
+    }
+	function SendPlayPauseCommand(){
+		var playpausemode= document.getElementById("PlayPauseButton").innerHTML;
+		ws.send(playpausemode);
+		//todo remove from code after server send playback state
+		ShowIsPlaying=!ShowIsPlaying;
+		UpdateUi();
+	}
+	function UpdateUi(){
+		//update connect button
+		if( ws.readyState == 0 ){
+			document.getElementById("ConnectButton").disabled=true;
+			document.getElementById("ConnectButton").innerHTML="connecting";
+		}
+		else if( ws.readyState == 2 ){
+			document.getElementById("ConnectButton").disabled=true;
+			document.getElementById("ConnectButton").innerHTML="disconnecting";
+		}
+		else if( ws.readyState == 3 ){
+			document.getElementById("ConnectButton").disabled=false;
+			document.getElementById("ConnectButton").innerHTML="connect";
+		}
+		else{ 
+			document.getElementById("ConnectButton").disabled=false;
+			document.getElementById("ConnectButton").innerHTML="disconnect";
+		}
+		//play-pause button
+		if( ws.readyState != 1 )//only available when connected to server
+			document.getElementById("PlayPauseButton").disabled=true;
+		else
+			document.getElementById("PlayPauseButton").disabled=false;
+		if( ShowIsPlaying )
+			document.getElementById("PlayPauseButton").innerHTML="pause";
+		else
+			document.getElementById("PlayPauseButton").innerHTML="play";
+   }
+   function DoConnectButton(){
+		if( document.getElementById("ConnectButton").innerHTML == "disconnect")
+			DisconnectServer();
+		else
+			ConnectServer();
+	}
+	var main_loop_timer;
+   function main_loop() {
+		main_loop_timer = setInterval(function() {
+			}, 500);
+	}
+   //main_loop();
+	  const show=JSON.parse(
+'{"title":"Fancy Demo","slides":[{"projector":1, "time": 0.5, "length": 2, "effect": [ {"stop":0,"color":"#000000"}, {"stop":0.25,"color":"#ffffff"}, {"stop":1,"color":"#ffffff"} ] },{"projector":1, "time": 4, "length": 3, "effect": [ {"stop":0,"color":"#ffffff"}, {"stop":0.75,"color":"#ffffff"}, {"stop":1,"color":"#000000"} ] } ,{"projector":1, "time": 9, "length": 5, "effect": [ {"stop":0,"color":"#ffffff"}, {"stop":0.75,"color":"#ffffff"}, {"stop":1,"color":"#000000"} ] }] }'
+);
+	function CreateScreenView(startTime,endTime,screenHeight,screenWidth,screenTime){
+		const secondsPerPixel = screenTime/screenHeight
+		const canvas=document.createElement('canvas');
+		canvas.width=screenWidth;
+		canvas.height=screenHeight*2;
+		const ctx=canvas.getContext('2d');
+		ctx.translate(0,canvas.height)
+		ctx.scale(1,-1)
+		show.slides.forEach( function(s){
+				  if( s.projector == 1 )
+		if( s.time < endTime && s.time+s.length >= startTime){
+			const y1=(s.time-startTime)/secondsPerPixel;
+			const y2=(s.time+s.length-startTime)/secondsPerPixel;
+			const grad=ctx.createLinearGradient(
+			  0,y1, 
+			  0,y2);
+			s.effect.forEach(function(cs){
+				grad.addColorStop(cs.stop,cs.color);});
+			ctx.fillStyle=grad;
+			ctx.fillRect(
+			 0,(s.time-startTime)/secondsPerPixel,
+	  		 40,(s.length)/secondsPerPixel);
+			ctx.strokeStyle='red';
+			ctx.rect(
+			0,(s.time-startTime)/secondsPerPixel,
+	  		40,(s.length)/secondsPerPixel);
+	  		ctx.stroke();
+		}
+	});
+		return canvas;
+	}
+   var currentScreen;
+   var currentScreenStartTime,currentScreenEndTime=0;
+   var timeOnScreen=5;
+   var time=0,lastTime=0;
+
+   function UpdateScreen() {
+	const canvas=document.getElementById('waterfall');
+	const ctx=canvas.getContext('2d');
+	if( time+timeOnScreen >= currentScreenEndTime ){
+	        currentScreenStartTime=time;
+	        currentScreenEndTime=time+2*timeOnScreen;
+		currentScreen=CreateScreenView(
+		  currentScreenStartTime,currentScreenEndTime,300,600,timeOnScreen);
+        }
+        ctx.clearRect(0,0,600,600);
+	ctx.drawImage(currentScreen,0,-300+300/timeOnScreen*(time-currentScreenStartTime));
+	const min=Math.floor(time/60)
+	const sec=Math.floor(time-60*min)
+	document.getElementById("showtime").textContent=String(min)+":"+String(sec);
+        if( time < 20)
+	window.requestAnimationFrame(UpdateScreen);
+		     time+=1/60;
+   }
+   ConnectServer();
+</script>
+		
+   </head>
+   
+   <body>
+      <div id = "controls">
+         <button id="ConnectButton" onclick = "javascript:DoConnectButton()">Connect Projectors</button>
+         <button id="PlayPauseButton" onclick = "javascript:SendPlayPauseCommand()"></button>
+         <button id="UpdateScreen" onclick = "javascript:UpdateScreen()">Drae</button>
+	 Time: <span id="showtime">00:00</span>
+      </div>
+      <div id="disp" width="600" height="300" >
+	 <canvas id="waterfall" width="600" height="300" style="border:1px solid #000000;"></canvas>
+      </div>
+      
+   </body>
+</html>
